@@ -7,24 +7,20 @@ import CNN
 import RCNN
 import random
 import argparse
-import spacy
 import time
 from nltk.tokenize import TweetTokenizer
 
 
 parser = argparse.ArgumentParser(description='CNN for sentiment analysis with rnn filter')
-parser.add_argument('-load-model', type=bool, default=False, help='whether load the pretrained model')
+parser.add_argument('-loadModel', default=False, action='store_true', help='whether load the pre trained model')
+parser.add_argument('-linearFilter',default=False, action='store_true', help='use linear filter')
 args = parser.parse_args()
 TYPE = 1  # the dataset type {0:IMDB, 1:SST}
-ADD_SENTI = False  # whether to add sentiment embeddings
+ADD_SENTI = True  # whether to add sentiment embeddings
 WVINIT = True   # whether to use local word vector or pretrained word vector
 FINETURN = False  # whether to adjust word vector and sentiment vector
-MODEL = True   # load the model or train from scratch
-# spacy_en = spacy.load("en")
-#
-#
-# def tokenizer(text):
-#     return [tok.text for tok in spacy_en.tokenizer(text)]
+MODEL = args.loadModel   # load the model or train from scratch
+FILTER = args.linearFilter
 token = TweetTokenizer(strip_handles=True, reduce_len=True)
 tokenizer = token.tokenize
 SEED = 1234
@@ -93,17 +89,21 @@ if ADD_SENTI:
     # print(TEXT.vocab.stoi)
     SPAD_IDX = STEXT.vocab.stoi[STEXT.pad_token]
     SENTI_DIM = 26
-    # model = CNN.CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, PAD_IDX,
-    #                 senti_size=SENTIMENT_SIZE, senti_dim=SENTI_DIM, passes=2, add_senti=True, spad_idx=SPAD_IDX)
-    model = RCNN.CNN(INPUT_DIM, EMBEDDING_DIM, 8, 300, OUTPUT_DIM, DROPOUT, PAD_IDX,
+    if FILTER:
+        model = CNN.CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, PAD_IDX,
+                     senti_size=SENTIMENT_SIZE, senti_dim=SENTI_DIM, passes=2, add_senti=True, spad_idx=SPAD_IDX)
+    else:
+        model = RCNN.CNN(INPUT_DIM, EMBEDDING_DIM, 8, 300, OUTPUT_DIM, DROPOUT, PAD_IDX,
                      senti_size=SENTIMENT_SIZE, senti_dim=SENTI_DIM, passes=2, add_senti=True, spad_idx=SPAD_IDX)
     SUNK_IDX = STEXT.vocab.stoi[STEXT.unk_token]
     model.sentiembedding.weight.data.copy_(STEXT.vocab.vectors)
     model.sentiembedding.weight.data[SUNK_IDX] = torch.zeros(SENTI_DIM)
     model.sentiembedding.weight.data[SPAD_IDX] = torch.zeros(SENTI_DIM)
 else:
-    # model = CNN.CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, PAD_IDX)
-    model = RCNN.CNN(INPUT_DIM, EMBEDDING_DIM, 5, 300, OUTPUT_DIM, DROPOUT, PAD_IDX)
+    if FILTER:
+        model = CNN.CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, PAD_IDX)
+    else:
+        model = RCNN.CNN(INPUT_DIM, EMBEDDING_DIM, 5, 300, OUTPUT_DIM, DROPOUT, PAD_IDX)
 if WVINIT:
     pretrained_embeddings = TEXT.vocab.vectors
     model.embedding.weight.data.copy_(pretrained_embeddings)
@@ -114,7 +114,7 @@ if MODEL:
     model.load_state_dict(torch.load('sentiment-model.pt'))
 # test_loss, test_acc, test_p, test_r, test_f1 = train.train(model, test_iterator)
 # print(f'Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}%')
-N_EPOCHS = 30
+N_EPOCHS = 40
 best_valid_loss = float('inf')
 
 for epoch in range(N_EPOCHS):
